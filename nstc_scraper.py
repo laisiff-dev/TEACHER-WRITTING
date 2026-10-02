@@ -172,7 +172,7 @@ def map_language_code(text):
         return 'C'
     return 'E'
 
-def search_teachers(keyword="", organ_desc="", page=1, page_size=50, full_time_only=True):
+def search_teachers(keyword="", organ_desc="", page=1, page_size=50, full_time_only=False):
     """
     Searches NSTC talent database by teacher name, keyword, or organization (e.g., 輔英科技大學).
     When full_time_only=True, cross-references against table1_1_List(老師清單).xls (輔英專任教師名冊)
@@ -218,21 +218,27 @@ def search_teachers(keyword="", organ_desc="", page=1, page_size=50, full_time_o
                             'raw_name': raw_text
                         })
 
-        if full_time_only and teachers:
-            # Cross-reference with 輔英專任教師名冊
-            roster_list, roster_map_name, roster_map_id = load_official_teacher_list('table1_1_List(老師清單).xls', full_time_only=True)
-            if roster_map_name:
-                filtered_teachers = []
-                for t in teachers:
-                    name = t['name_chi']
-                    if name in roster_map_name:
-                        matched_info = roster_map_name[name]
-                        t['fy_id'] = matched_info['id']
-                        t['dept'] = matched_info['dept']
-                        t['job_type'] = matched_info['job_type']
-                        filtered_teachers.append(t)
-                    else:
+        # Load 輔英專任教師名冊 for metadata binding and optional filtering
+        roster_list, roster_map_name, roster_map_id = load_official_teacher_list('table1_1_List(老師清單).xls', full_time_only=True)
+        if roster_map_name and teachers:
+            filtered_teachers = []
+            for t in teachers:
+                name = t['name_chi']
+                if name in roster_map_name:
+                    matched_info = roster_map_name[name]
+                    t['fy_id'] = matched_info['id']
+                    t['dept'] = matched_info['dept']
+                    t['job_type'] = matched_info['job_type']
+                    filtered_teachers.append(t)
+                else:
+                    if full_time_only:
                         print(f"[-] 自動去除非輔英專任人員: {name} (非屬 280 位專任教師名冊)")
+                    else:
+                        t['dept'] = '兼任/非名冊人員'
+                        filtered_teachers.append(t)
+            if full_time_only:
+                teachers = [t for t in filtered_teachers if t.get('job_type') == '專任']
+            else:
                 teachers = filtered_teachers
 
         return teachers

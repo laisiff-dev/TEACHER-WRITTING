@@ -56,11 +56,12 @@ def api_search():
     data = request.get_json(force=True, silent=True) or {}
     keyword = data.get('keyword', '').strip()
     organ_desc = data.get('organ_desc', '').strip()
+    full_time_only = data.get('full_time_only', False)
     
     if not organ_desc and not keyword:
         organ_desc = '輔英科技大學'
         
-    teachers = search_teachers(keyword=keyword, organ_desc=organ_desc, page_size=100)
+    teachers = search_teachers(keyword=keyword, organ_desc=organ_desc, page_size=100, full_time_only=full_time_only)
     return jsonify({
         'success': True,
         'count': len(teachers),

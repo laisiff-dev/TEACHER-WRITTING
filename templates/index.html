@@ -488,6 +488,13 @@
                     </div>
                 </div>
 
+                <div class="form-group" style="margin-top: 0.5rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="chkFullTimeOnly" style="width: 16px; height: 16px; cursor: pointer;">
+                    <label for="chkFullTimeOnly" style="font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; user-select: none;">
+                        僅過濾顯示 280 位輔英專任教師名冊 (預設不勾選顯示國科會全部結果)
+                    </label>
+                </div>
+
                 <button type="submit" class="btn btn-primary" id="btnSearch">
                     <i class="fa-solid fa-search"></i>
                     <span>搜尋輔英/國科會人才庫</span>
@@ -757,6 +764,7 @@
         e.preventDefault();
         const kw = document.getElementById('keyword').value.trim();
         const organ = document.getElementById('organDesc').value.trim();
+        const fullTimeOnly = document.getElementById('chkFullTimeOnly').checked;
         const btn = document.getElementById('btnSearch');
         
         btn.disabled = true;
@@ -766,7 +774,7 @@
             const data = await safeFetchJson('/api/search', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ keyword: kw, organ_desc: organ })
+                body: JSON.stringify({ keyword: kw, organ_desc: organ, full_time_only: fullTimeOnly })
             });
             searchResults = data.teachers || [];
             
@@ -795,8 +803,12 @@
         container.innerHTML = list.map((t, idx) => `
             <div class="teacher-item selected" onclick="toggleTeacherSelect(this, ${idx})">
                 <div class="teacher-info-text">
-                    <strong>${t.name_chi} ${t.name_eng}</strong>
-                    <span>rsNo: ${t.rsNo.substring(0, 8)}...</span>
+                    <strong>${t.name_chi} ${t.name_eng || ''}</strong>
+                    <span style="font-size: 0.78rem; color: var(--text-muted); display: block; margin-top: 2px;">
+                        ${t.dept ? `<span style="color: var(--accent-blue);">${t.dept}</span>` : ''} 
+                        ${t.fy_id ? ` | <span style="color: var(--accent-emerald);">ID: ${t.fy_id}</span>` : ''} 
+                        | rsNo: ${t.rsNo ? t.rsNo.substring(0, 8) : ''}...
+                    </span>
                 </div>
                 <input type="checkbox" checked onclick="event.stopPropagation()">
             </div>
