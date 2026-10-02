@@ -302,21 +302,44 @@ def scrape_teacher_projects(rs_no, teacher_name=""):
             
     return projects
 
-def scrape_teacher_details(rs_no):
+def scrape_teacher_details(rs_no, teacher_name=None, teacher_id=None):
     """
-    Scrapes researcher basic info, publication catalog, and research projects for a given rsNo.
+    Scrapes researcher basic info, publication catalog, and research projects for a given rsNo or Teacher ID.
     Returns (teacher_info, publications, projects).
     """
+    actual_rs_no = rs_no
+    fy_id = teacher_id
+    t_name = teacher_name
+    
+    if not re.match(r'^[a-f0-9]{32}$', str(rs_no), re.I):
+        roster_list, roster_map_name, roster_map_id = load_official_teacher_list('table1_1_List(老師清單).xls', full_time_only=False)
+        if str(rs_no) in roster_map_id:
+            item = roster_map_id[str(rs_no)]
+            fy_id = item['id']
+            t_name = item['name']
+        elif str(rs_no) in roster_map_name:
+            item = roster_map_name[str(rs_no)]
+            fy_id = item['id']
+            t_name = item['name']
+            
+        if t_name:
+            matches = search_teachers(keyword=t_name, page_size=5, full_time_only=False)
+            if matches:
+                actual_rs_no = matches[0]['rsNo']
+            else:
+                return {'rsNo': fy_id or rs_no, 'name_chi': t_name or '', 'name_eng': '', 'org': '國科會未查獲', 'title': '', 'fy_id': fy_id}, [], []
+
     teacher_info = {
-        'rsNo': rs_no,
-        'name_chi': '',
+        'rsNo': actual_rs_no,
+        'fy_id': fy_id,
+        'name_chi': t_name or '',
         'name_eng': '',
         'org': '',
         'title': ''
     }
     
     # 1. Fetch Basic Info
-    basic_params = {'action': 'initBasic', 'rsNo': rs_no, 'LANG': 'chi'}
+    basic_params = {'action': 'initBasic', 'rsNo': actual_rs_no, 'LANG': 'chi'}
     for target_url in [BASE_URL, ALT_BASE_URL]:
         try:
             r_basic = requests.get(target_url, params=basic_params, headers=DEFAULT_HEADERS, verify=False, timeout=15)

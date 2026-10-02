@@ -56,12 +56,43 @@ def api_search():
     data = request.get_json(force=True, silent=True) or {}
     keyword = data.get('keyword', '').strip()
     organ_desc = data.get('organ_desc', '').strip()
-    full_time_only = data.get('full_time_only', False)
+    full_time_only = data.get('full_time_only', True)
     
-    if not organ_desc and not keyword:
-        organ_desc = '輔英科技大學'
-        
-    teachers = search_teachers(keyword=keyword, organ_desc=organ_desc, page_size=100, full_time_only=full_time_only)
+    # 1. Load official teacher list (table1_1_List)
+    roster_list, _, _ = load_official_teacher_list('table1_1_List(老師清單).xls', full_time_only=full_time_only)
+    
+    teachers = []
+    seen_ids = set()
+    
+    for r in roster_list:
+        kw_match = not keyword or (
+            keyword.lower() in r['name'].lower() or 
+            keyword.lower() in r['dept'].lower() or 
+            keyword.lower() in r['id'].lower() or 
+            keyword.lower() in r['rank'].lower()
+        )
+        if kw_match:
+            seen_ids.add(r['id'])
+            seen_ids.add(r['name'])
+            teachers.append({
+                'rsNo': r['id'],
+                'fy_id': r['id'],
+                'name_chi': r['name'],
+                'name_eng': '',
+                'dept': r['dept'],
+                'rank': r['rank'],
+                'job_type': r['job_type'],
+                'raw_name': f"{r['name']} ({r['dept']})"
+            })
+            
+    # 2. Optionally query NSTC online search for additional keyword matches
+    if keyword and len(teachers) < 20:
+        nstc_teachers = search_teachers(keyword=keyword, organ_desc=organ_desc, page_size=50, full_time_only=False)
+        for nt in nstc_teachers:
+            if nt['name_chi'] not in seen_ids and nt['rsNo'] not in seen_ids:
+                seen_ids.add(nt['name_chi'])
+                teachers.append(nt)
+
     return jsonify({
         'success': True,
         'count': len(teachers),
