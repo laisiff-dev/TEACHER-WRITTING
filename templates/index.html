@@ -542,9 +542,15 @@
             </div>
 
             <div id="searchResultsArea" style="margin-top: 1.5rem; display: none;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
                     <span style="font-size: 0.85rem; color: var(--text-secondary);" id="searchCount">找到 0 位研究人員</span>
-                    <button type="button" onclick="selectAllTeachers()" style="background: none; border: none; color: var(--accent-blue); font-size: 0.8rem; cursor: pointer;">全選 / 反選</button>
+                    <div style="display: flex; gap: 0.35rem; align-items: center;">
+                        <button type="button" onclick="selectPresetTeachers('all')" class="btn btn-secondary" style="width: auto; padding: 0.2rem 0.5rem; font-size: 0.75rem;">全選</button>
+                        <button type="button" onclick="selectPresetTeachers(10)" class="btn btn-secondary" style="width: auto; padding: 0.2rem 0.5rem; font-size: 0.75rem;">前10位</button>
+                        <button type="button" onclick="selectPresetTeachers(30)" class="btn btn-secondary" style="width: auto; padding: 0.2rem 0.5rem; font-size: 0.75rem;">前30位</button>
+                        <button type="button" onclick="selectPresetTeachers(50)" class="btn btn-secondary" style="width: auto; padding: 0.2rem 0.5rem; font-size: 0.75rem;">前50位</button>
+                        <button type="button" onclick="deselectAllTeachers()" class="btn btn-secondary" style="width: auto; padding: 0.2rem 0.5rem; font-size: 0.75rem; color: #f87171; border-color: rgba(239, 68, 68, 0.4);">清除全選</button>
+                    </div>
                 </div>
                 <div class="teacher-list" id="teacherList"></div>
 
@@ -552,6 +558,25 @@
                     <i class="fa-solid fa-cloud-arrow-down"></i>
                     <span>抓取選定教師著作數據</span>
                 </button>
+
+                <!-- Real-Time Batch Scraping Progress Bar Box -->
+                <div id="scrapeProgressBox" style="display: none; margin-top: 1rem; background: rgba(15, 23, 42, 0.85); border: 1px solid var(--accent-blue); border-radius: var(--radius-md); padding: 1rem; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.15);">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem; align-items: center;">
+                        <span id="scrapeProgressStatus" style="color: var(--accent-blue); font-weight: 600;">
+                            <i class="fa-solid fa-spinner spinner"></i> 正在批次擷取數據 (0 / 0 位)...
+                        </span>
+                        <span id="scrapeProgressPercent" style="color: var(--accent-emerald); font-weight: 700; font-size: 0.95rem;">0%</span>
+                    </div>
+                    <div style="width: 100%; height: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px; overflow: hidden; margin-bottom: 0.75rem;">
+                        <div id="scrapeProgressBarFill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8, #10b981); transition: width 0.3s ease;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span id="scrapeProgressDetails" style="font-size: 0.75rem; color: var(--text-muted);">準備中...</span>
+                        <button type="button" class="btn btn-secondary" style="width: auto; padding: 0.3rem 0.75rem; font-size: 0.75rem; border-color: #ef4444; color: #f87171;" onclick="cancelScraping()">
+                            <i class="fa-solid fa-stop"></i> 停止/中止抓取
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -882,54 +907,128 @@
         el.classList.toggle('selected', cb.checked);
     }
 
-    function selectAllTeachers() {
+    function selectPresetTeachers(count) {
         const items = document.querySelectorAll('.teacher-item');
-        const anyUnchecked = Array.from(items).some(it => !it.querySelector('input').checked);
-        items.forEach(it => {
+        items.forEach((it, idx) => {
             const cb = it.querySelector('input');
-            cb.checked = anyUnchecked;
-            it.classList.toggle('selected', anyUnchecked);
+            const shouldCheck = (count === 'all') || (idx < count);
+            cb.checked = shouldCheck;
+            it.classList.toggle('selected', shouldCheck);
         });
     }
 
+    function deselectAllTeachers() {
+        const items = document.querySelectorAll('.teacher-item');
+        items.forEach(it => {
+            const cb = it.querySelector('input');
+            cb.checked = false;
+            it.classList.remove('selected');
+        });
+    }
+
+    let isScrapingCancelled = false;
+
+    function cancelScraping() {
+        isScrapingCancelled = true;
+        const statusEl = document.getElementById('scrapeProgressStatus');
+        if (statusEl) {
+            statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:#ef4444;"></i> 正在停止中...請稍候';
+        }
+    }
+
     async function startScraping() {
-        const selectedRsNos = [];
+        const selectedTeachers = [];
         const items = document.querySelectorAll('.teacher-item');
         items.forEach((it, idx) => {
             if (it.querySelector('input').checked) {
-                selectedRsNos.push(searchResults[idx].rsNo);
+                selectedTeachers.push(searchResults[idx]);
             }
         });
 
-        if (selectedRsNos.length === 0) {
+        if (selectedTeachers.length === 0) {
             alert('請至少勾選一位研究人員！');
             return;
         }
 
-        const btn = document.getElementById('btnScrape');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> 抓取著作集中...';
+        isScrapingCancelled = false;
 
-        try {
-            const data = await safeFetchJson('/api/scrape', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ rs_nos: selectedRsNos })
-            });
-            
-            if (data.success) {
-                currentData = data.categorized || { journal: [], conference: [], book: [] };
-                updateUIWithData(currentData);
-                alert(`抓取完成！成功擷取 ${data.total_pubs} 筆著作。已自動儲存3種格式檔！`);
-            } else {
-                alert('抓取失敗: ' + data.message);
+        const btn = document.getElementById('btnScrape');
+        const progressBox = document.getElementById('scrapeProgressBox');
+        const progressStatus = document.getElementById('scrapeProgressStatus');
+        const progressPercent = document.getElementById('scrapeProgressPercent');
+        const progressBarFill = document.getElementById('scrapeProgressBarFill');
+        const progressDetails = document.getElementById('scrapeProgressDetails');
+
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner spinner"></i> 批次抓取中 (${selectedTeachers.length} 位)...`;
+        progressBox.style.display = 'block';
+        progressBarFill.style.width = '0%';
+        progressPercent.innerText = '0%';
+        progressStatus.innerHTML = `<i class="fa-solid fa-spinner spinner"></i> 正在擷取 (0 / ${selectedTeachers.length} 位)...`;
+
+        const BATCH_SIZE = 15;
+        const total = selectedTeachers.length;
+        let completedCount = 0;
+        let accumulatedPubs = 0;
+        let accumulatedProjs = 0;
+
+        for (let i = 0; i < total; i += BATCH_SIZE) {
+            if (isScrapingCancelled) {
+                break;
             }
-        } catch (err) {
-            alert('請求錯誤: ' + err.message);
-        } finally {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 抓取選定教師著作數據';
+
+            const batch = selectedTeachers.slice(i, i + BATCH_SIZE);
+            const batchRsNos = batch.map(t => t.rsNo || t.fy_id);
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+            const totalBatches = Math.ceil(total / BATCH_SIZE);
+
+            progressDetails.innerText = `正在執行第 ${batchNum} / ${totalBatches} 批次 (${i + 1} - ${Math.min(i + BATCH_SIZE, total)} 位)...`;
+
+            try {
+                const data = await safeFetchJson('/api/scrape', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ rs_nos: batchRsNos })
+                });
+                
+                if (data.success) {
+                    completedCount += batch.length;
+                    accumulatedPubs += (data.total_pubs || 0);
+                    accumulatedProjs += (data.total_projs || 0);
+
+                    const pct = Math.min(100, Math.round((completedCount / total) * 100));
+                    progressBarFill.style.width = `${pct}%`;
+                    progressPercent.innerText = `${pct}%`;
+                    progressStatus.innerHTML = `<i class="fa-solid fa-spinner spinner"></i> 已擷取 (${completedCount} / ${total} 位)...`;
+
+                    if (data.categorized) {
+                        currentData = data.categorized;
+                        updateUIWithData(currentData);
+                    }
+
+                    reloadCollegeChart();
+                }
+            } catch (err) {
+                console.error(`第 ${batchNum} 批次抓取發生錯誤:`, err);
+            }
         }
+
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 抓取選定教師著作數據';
+
+        if (isScrapingCancelled) {
+            progressStatus.innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:#f59e0b;"></i> 已停止批次抓取';
+            progressDetails.innerText = `共完成 ${completedCount} 位教師對比，擷取 ${accumulatedPubs} 筆著作與 ${accumulatedProjs} 筆計畫！`;
+            alert(`已停止抓取！共處理了 ${completedCount} / ${total} 位教師數據。`);
+        } else {
+            progressStatus.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#10b981;"></i> 批次抓取全部完成！';
+            progressDetails.innerText = `成功處理 ${completedCount} 位教師，累計擷取 ${accumulatedPubs} 筆著作與 ${accumulatedProjs} 筆國科會計畫案！`;
+            alert(`🎉 批次抓取完全結束！共處理 ${completedCount} 位教師，成功擷取 ${accumulatedPubs} 筆著作與 ${accumulatedProjs} 筆國科會計畫案！`);
+        }
+
+        setTimeout(() => {
+            if (!isScrapingCancelled) progressBox.style.display = 'none';
+        }, 10000);
     }
 
     let searchResults = [];
