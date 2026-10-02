@@ -31,10 +31,10 @@
             --shadow-glow: 0 0 25px rgba(56, 189, 248, 0.15);
         }
 
-        .chart-mode-btn.active {
+        .chart-mode-btn.active, .chart-year-btn.active {
             background: var(--accent-blue) !important;
             color: #0f172a !important;
-            font-weight: 700 !original;
+            font-weight: 700 !important;
         }
 
         * {
@@ -753,21 +753,33 @@
         </div>
     </div>
 
-    <!-- College Analytics Chart Section (近三年各院學術產出比較條狀圖) -->
+    <!-- College Analytics Chart Section (112-115年度各院學術產出比較條狀圖) -->
     <div class="glass-card" style="margin-top: 2rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
             <div>
                 <h2 class="card-title" style="margin-bottom: 0.25rem;">
                     <i class="fa-solid fa-chart-column" style="color: var(--accent-emerald);"></i>
-                    <span>近三年各學院學術產出比較條狀圖</span>
+                    <span>112 - 115 年度 各學院學術產出比較條狀圖</span>
                 </h2>
                 <p style="font-size: 0.825rem; color: var(--text-secondary);">
-                    跨學院比較：期刊論文 (篇)、研討會論文 (篇) 與國科會計畫核定金額 (萬元)
+                    跨學院比較 (112 - 115 年度 / 2023 - 2026 年)：期刊論文 (篇)、研討會論文 (篇) 與國科會計畫金額 (萬元)
                 </p>
             </div>
 
             <!-- Metric & View Selector Buttons -->
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+                <div style="display: flex; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 3px; gap: 3px;">
+                    <button type="button" class="btn btn-secondary chart-year-btn active" style="width: auto; padding: 0.35rem 0.65rem; font-size: 0.78rem; border: none;" onclick="changeChartYearRange([2023, 2024, 2025, 2026], this)">
+                        112-115年度
+                    </button>
+                    <button type="button" class="btn btn-secondary chart-year-btn" style="width: auto; padding: 0.35rem 0.65rem; font-size: 0.78rem; border: none;" onclick="changeChartYearRange([2024, 2025, 2026], this)">
+                        113-115年度
+                    </button>
+                    <button type="button" class="btn btn-secondary chart-year-btn" style="width: auto; padding: 0.35rem 0.65rem; font-size: 0.78rem; border: none;" onclick="changeChartYearRange([2022, 2023, 2024, 2025, 2026], this)">
+                        近5年
+                    </button>
+                </div>
+
                 <div style="display: flex; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 3px; gap: 3px;">
                     <button type="button" class="btn btn-secondary chart-mode-btn active" style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.8rem; border: none;" onclick="switchChartMetric('journal', this)">
                         <i class="fa-solid fa-book-open"></i> 期刊論文
@@ -1216,9 +1228,16 @@
         '人文與管理學院': { bg: 'rgba(16, 185, 129, 0.75)', border: '#10b981' }
     };
 
-    async function loadCollegeAnalyticsData() {
+    let activeChartYears = [2023, 2024, 2025, 2026];
+
+    async function loadCollegeAnalyticsData(targetYears = null) {
+        if (targetYears) activeChartYears = targetYears;
         try {
-            const data = await safeFetchJson('/api/college_analytics');
+            const data = await safeFetchJson('/api/college_analytics', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ years: activeChartYears })
+            });
             if (data && data.success) {
                 collegeAnalyticsData = data;
                 renderCollegeChart();
@@ -1226,6 +1245,12 @@
         } catch (err) {
             console.error("載入各院學術數據失敗:", err);
         }
+    }
+
+    function changeChartYearRange(years, btnEl) {
+        document.querySelectorAll('.chart-year-btn').forEach(b => b.classList.remove('active'));
+        if (btnEl) btnEl.classList.add('active');
+        loadCollegeAnalyticsData(years);
     }
 
     function switchChartMetric(metric, btnEl) {
@@ -1287,7 +1312,7 @@
         collegeChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: years.map(y => `${y} 年 (民國 ${y - 1911} 年)`),
+                labels: years.map(y => `${y - 1911} 年度 (${y} 年)`),
                 datasets: datasets
             },
             options: {

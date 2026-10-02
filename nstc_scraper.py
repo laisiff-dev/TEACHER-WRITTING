@@ -1170,11 +1170,10 @@ def get_college_by_dept(dept):
 
 def compute_college_analytics(cat_dfs=None, target_years=None):
     """
-    Computes 3-year analytics per College for Journal papers, Conference papers, and NSTC Project budgets (in 萬元).
+    Computes analytics per College for 112-115年度 (2023-2026) for Journal papers, Conference papers, and NSTC Project budgets (in 萬元).
     """
     if target_years is None:
-        curr_ce = datetime.datetime.now().year
-        target_years = [curr_ce - 2, curr_ce - 1, curr_ce]
+        target_years = [2023, 2024, 2025, 2026]
         
     target_years = [int(y) for y in target_years]
     
