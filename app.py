@@ -24,7 +24,8 @@ from nstc_scraper import (
     normalize_table1_9,
     normalize_table1_10,
     normalize_table1_11,
-    normalize_table1_17
+    normalize_table1_17,
+    compute_college_analytics
 )
 
 app = Flask(__name__, template_folder='templates')
@@ -359,6 +360,18 @@ def download_all_xls():
                 zf.write(fname, fname)
     memory_file.seek(0)
     return send_file(memory_file, mimetype='application/zip', as_attachment=True, download_name='all_table_xls_files.zip')
+@app.route('/api/college_analytics', methods=['GET', 'POST'])
+def api_college_analytics():
+    global LATEST_SCRAPED
+    data = request.get_json(force=True, silent=True) or {}
+    target_years = data.get('years', None)
+    try:
+        res = compute_college_analytics(cat_dfs=LATEST_SCRAPED.get('cat_dfs'), target_years=target_years)
+        return jsonify({'success': True, **res})
+    except Exception as e:
+        print(f"Error computing college analytics: {e}")
+        return jsonify({'success': False, 'message': f'計算各院統計失敗: {str(e)}'}), 500
+
 @app.errorhandler(500)
 def internal_server_error(e):
     print(f"Server 500 Error: {e}")

@@ -1153,6 +1153,104 @@ def run_quarterly_update(organ="輔英科技大學", output_dir="output", full_t
     print(f"[✓] 每季專任教師著作與國科會計畫案定期更新完成！狀態: {res['updated']}")
     return res['updated'], res.get('all_teachers', []), res.get('all_pubs', []), res.get('all_projs', []), res['cat_dfs']
 
+COLLEGE_MAP = {
+    '護理學院': ['護理系', '護理科', '學士後護理系', '助產與婦嬰健康照護系', '高齡及長期照護事業系'],
+    '醫學與健康學院': ['醫學檢驗生物技術系', '保健營養系', '物理治療系'],
+    '環境與生命學院': ['環境工程與科學系', '生物科技與綠色產業系', '健康美容系', '職業安全衛生系', '應用化學及材料科學系'],
+    '人文與管理學院': ['資訊科技與管理系', '健康事業管理系', '休閒與遊憩事業管理系', '幼兒保育暨產業系', '應用外語系', '軍訓教官', '全人教育中心', '共同教育中心']
+}
+
+def get_college_by_dept(dept):
+    if not dept:
+        return '其他單位'
+    for c, depts in COLLEGE_MAP.items():
+        if any(d in str(dept) for d in depts):
+            return c
+    return '其他單位'
+
+def compute_college_analytics(cat_dfs=None, target_years=None):
+    """
+    Computes 3-year analytics per College for Journal papers, Conference papers, and NSTC Project budgets (in 萬元).
+    """
+    if target_years is None:
+        curr_ce = datetime.datetime.now().year
+        target_years = [curr_ce - 2, curr_ce - 1, curr_ce]
+        
+    target_years = [int(y) for y in target_years]
+    
+    # Load teacher roster for teacher ID -> College mapping
+    roster_list, _, roster_map_id = load_official_teacher_list('table1_1_List(老師清單).xls', full_time_only=False)
+    id_to_college = {t_id: get_college_by_dept(info['dept']) for t_id, info in roster_map_id.items()}
+    
+    colleges = ['護理學院', '醫學與健康學院', '環境與生命學院', '人文與管理學院']
+    analytics = {c: {y: {'journal': 0, 'conference': 0, 'budget': 0.0} for y in target_years} for c in colleges}
+    
+    # Load DataFrames
+    df9 = cat_dfs.get('期刊論文') if (cat_dfs and '期刊論文' in cat_dfs) else (pd.read_excel('table1_9(期刊論文).xls') if os.path.exists('table1_9(期刊論文).xls') else pd.DataFrame())
+    df10 = cat_dfs.get('研討會論文') if (cat_dfs and '研討會論文' in cat_dfs) else (pd.read_excel('table1_10(研討會論文).xls') if os.path.exists('table1_10(研討會論文).xls') else pd.DataFrame())
+    df17 = cat_dfs.get('國科會計畫案') if (cat_dfs and '國科會計畫案' in cat_dfs) else (pd.read_excel('table1_17(國科會計畫案).xls') if os.path.exists('table1_17(國科會計畫案).xls') else pd.DataFrame())
+    
+    # Process Journals
+    if not df9.empty:
+        for _, r in df9.iterrows():
+            cid = str(r.get('身分編碼', '')).strip()
+            col = id_to_college.get(cid)
+            y = r.get('發表年份')
+            if pd.notna(y):
+                try:
+                    yi = int(y)
+                    yi = (yi + 1911) if yi < 1000 else yi
+                    if col in analytics and yi in target_years:
+                        analytics[col][yi]['journal'] += 1
+                except:
+                    pass
+
+    # Process Conferences
+    if not df10.empty:
+        for _, r in df10.iterrows():
+            cid = str(r.get('身分編碼', '')).strip()
+            col = id_to_college.get(cid)
+            y = r.get('發表年份')
+            if pd.notna(y):
+                try:
+                    yi = int(y)
+                    yi = (yi + 1911) if yi < 1000 else yi
+                    if col in analytics and yi in target_years:
+                        analytics[col][yi]['conference'] += 1
+                except:
+                    pass
+
+    # Process Projects
+    if not df17.empty:
+        for _, r in df17.iterrows():
+            cid = str(r.get('身分編碼', '')).strip()
+            col = id_to_college.get(cid)
+            y = r.get('西元年') or r.get('年度')
+            if pd.notna(y):
+                m = re.search(r'\d+', str(y))
+                if m:
+                    yi = int(m.group(0))
+                    yi = (yi + 1911) if yi < 1000 else yi
+                    b_raw = str(r.get('核定經費', '0'))
+                    b_clean = re.sub(r'[^\d.]', '', b_raw)
+                    try:
+                        budget_wan = float(b_clean) / 10000.0 if b_clean else 0.0
+                        if col in analytics and yi in target_years:
+                            analytics[col][yi]['budget'] += budget_wan
+                    except:
+                        pass
+
+    # Round budget values
+    for c in colleges:
+        for y in target_years:
+            analytics[c][y]['budget'] = round(analytics[c][y]['budget'], 2)
+
+    return {
+        'years': target_years,
+        'colleges': colleges,
+        'analytics': analytics
+    }
+
 if __name__ == '__main__':
     print("Testing Updated NSTC & Fooyin Scraper Module...")
     res = cross_match_fooyin_faculty()
